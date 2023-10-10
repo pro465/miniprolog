@@ -1,11 +1,8 @@
-use error::{Error, ErrorTy};
+use error::Error;
 use parser::{Def, Expr, IdAlloc};
-use std::{
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+use std::collections::HashMap;
 use token::TokenTy;
-use unify::{substitute, ApplyError};
+use unify::{substitute_and_freshen, ApplyError};
 
 mod error;
 mod parser;
@@ -51,20 +48,19 @@ impl Context {
 
         Ok(e)
     }
-}
 
-pub fn apply(defs: &Rules, e: Vec<Expr>) {
-    let mut qvars = HashMap::new();
-    let mut order = Vec::new();
-    vars(&mut qvars, &mut order, &e);
-    match apply_internal(defs, e.clone(), qvars) {
-        Ok(sols) if !sols.is_empty() => {
-            print_sols(sols, &order);
+    pub fn apply(&mut self, defs: &Rules, e: Vec<Expr>) {
+        let mut qvars = HashMap::new();
+        let mut order = Vec::new();
+        vars(&mut qvars, &mut order, &e);
+        match apply_internal(&mut self.id, defs, e.clone(), qvars) {
+            Ok(sols) if !sols.is_empty() => {
+                print_sols(sols, &order);
+            }
+            _ => println!("false."),
         }
-        _ => println!("false."),
     }
 }
-
 fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
     let mut i = 0;
     while i < sols.len() {
@@ -92,15 +88,15 @@ fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
 }
 
 fn apply_internal<'a>(
+    gen: &mut IdAlloc,
     defs: &Rules,
     mut e: Vec<Expr>,
     qvars: HashMap<&'a str, Expr>,
 ) -> Result<Vec<HashMap<&'a str, Expr>>, ApplyError> {
     with_stacker(|| {
-        e.retain(|i| match i {
-            Expr::Fun { name, args, .. } if name == "true" && args.is_empty() => false,
-            _ => true,
-        });
+        e.retain(
+            |i| !matches!(i, Expr::Fun { name, args, .. } if name == "true" && args.is_empty()),
+        );
         let curr_e = match e.pop() {
             Some(e) => e,
             _ => return Ok(vec![qvars]),
@@ -123,18 +119,20 @@ fn apply_internal<'a>(
         if v.is_empty() {
             Err(ApplyError::NoMatch)
         } else {
+            gen.new_clause();
+
             let mut ret = Vec::new();
             for (rep, sub) in v {
                 let qvars: HashMap<&str, Expr> = qvars
                     .iter()
-                    .map(|(s, e)| (*s, substitute(&sub, e)))
+                    .map(|(s, e)| (*s, substitute_and_freshen(gen, &sub, e)))
                     .collect();
                 let e = e
                     .iter()
                     .chain(rep.iter())
-                    .map(|e| substitute(&sub, e))
+                    .map(|e| substitute_and_freshen(gen, &sub, e))
                     .collect();
-                ret.extend_from_slice(&apply_internal(defs, e, qvars).unwrap_or_default());
+                ret.extend_from_slice(&apply_internal(gen, defs, e, qvars).unwrap_or_default());
             }
             Ok(ret)
         }

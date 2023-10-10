@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     error::{Error, Loc},
@@ -25,14 +25,6 @@ pub enum Expr {
         id: u64,
         loc: Loc,
     },
-}
-
-impl Expr {
-    pub(crate) fn loc(&self) -> Loc {
-        match self {
-            Expr::Var { loc, .. } | Expr::Fun { loc, .. } => *loc,
-        }
-    }
 }
 
 impl Default for Expr {

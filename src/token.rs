@@ -83,7 +83,7 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn loc(&self) -> Loc {
-        self.loc.clone()
+        self.loc
     }
 
     pub fn is_token(&mut self, tok: TokenTy) -> Result<bool, Error> {
@@ -184,7 +184,7 @@ impl<'a> Scanner<'a> {
                 .map(|(i, _c)| i)
                 .unwrap_or(self.rest.len());
             self.skip(i);
-            if self.rest.chars().next() != Some('#') {
+            if !self.rest.starts_with('%') {
                 break;
             }
             let i = self

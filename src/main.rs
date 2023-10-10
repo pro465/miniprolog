@@ -1,5 +1,5 @@
 use io::Write;
-use miniprolog::{apply, Context, Rules};
+use miniprolog::{Context, Rules};
 use std::{fs, io};
 
 fn main() {
@@ -59,7 +59,7 @@ fn repl(rules: &Rules, ctx: &mut Context) {
         }
 
         let expr = ctx.parse_clause(line);
-        let mut expr = match expr {
+        let expr = match expr {
             Ok(x) => x,
             Err(e) => {
                 e.report();
@@ -67,7 +67,7 @@ fn repl(rules: &Rules, ctx: &mut Context) {
             }
         };
 
-        apply(&rules, expr);
+        ctx.apply(&rules, expr);
     }
 }
 

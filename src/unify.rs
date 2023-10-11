@@ -19,6 +19,9 @@ impl Def {
 
 fn unify<'a>(b: &mut HashMap<u64, &'a Expr>, pat: &'a Expr, e: &'a Expr) -> Result<(), ApplyError> {
     match (pat, e) {
+        (Expr::Var { id, .. }, Expr::Var { id: id2, .. }) if b.contains_key(id2) => {
+            solve(b, *id, b[id2])
+        }
         (Expr::Var { id, .. }, _) => solve(b, *id, e),
 
         (_, Expr::Var { id, .. }) => solve(b, *id, pat),
@@ -41,7 +44,7 @@ fn unify<'a>(b: &mut HashMap<u64, &'a Expr>, pat: &'a Expr, e: &'a Expr) -> Resu
 }
 
 pub(crate) fn substitute_and_freshen(
-    gen: &mut IdAlloc,
+    gen: &mut IdAlloc<u64>,
     b: &HashMap<u64, &Expr>,
     rep: &Expr,
 ) -> Expr {
@@ -57,11 +60,12 @@ pub(crate) fn substitute_and_freshen(
         },
     }
 }
-fn freshen(e: &Expr, gen: &mut IdAlloc) -> Expr {
+
+fn freshen(e: &Expr, gen: &mut IdAlloc<u64>) -> Expr {
     match e {
         Expr::Var { name, id, loc } => Expr::Var {
             name: name.clone(),
-            id: id + gen.alloc(name),
+            id: gen.alloc(*id),
             loc: *loc,
         },
         Expr::Fun { name, args, loc } => Expr::Fun {
@@ -78,27 +82,24 @@ fn freshen(e: &Expr, gen: &mut IdAlloc) -> Expr {
 
 fn solve<'a>(b: &mut HashMap<u64, &'a Expr>, id: u64, e: &'a Expr) -> Result<(), ApplyError> {
     if let Some(e2) = b.get(&id).copied() {
-        if e2 != e {
-            let res = if let Expr::Var { id, .. } = e {
-                solve(b, *id, e2)
-            } else {
-                Err(ApplyError::UnifyFail)
-            };
-            if res.is_ok() {
-                return res;
-            }
-            if let Expr::Var { id: id2, .. } = e2 {
-                let res2 = solve(b, *id2, e);
-                if res2.is_ok() {
-                    b.remove(&id);
-                    b.insert(id, e);
-                }
-                res2
-            } else {
-                Err(ApplyError::UnifyFail)
-            }
-        } else {
+        let res = if e == e2 {
             Ok(())
+        } else if let Expr::Var { id, .. } = e {
+            solve(b, *id, e2)
+        } else {
+            Err(ApplyError::UnifyFail)
+        };
+        if res.is_ok() {
+            return res;
+        }
+        if let Expr::Var { id: id2, .. } = e2 {
+            let res2 = solve(b, *id2, e);
+            if res2.is_ok() {
+                *b.get_mut(&id).unwrap() = e;
+            }
+            res2
+        } else {
+            Err(ApplyError::UnifyFail)
         }
     } else {
         b.insert(id, e);

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use crate::{
     error::{Error, Loc},
@@ -75,20 +75,23 @@ impl Display for Expr {
     }
 }
 
-pub(crate) struct IdAlloc(HashMap<String, u64>, u64);
+pub(crate) struct IdAlloc<T>(HashMap<T, u64>, u64);
 
-impl IdAlloc {
-    pub(crate) fn new() -> Self {
-        Self(HashMap::new(), 0)
+impl<T: Eq + Hash> IdAlloc<T> {
+    pub(crate) fn new(i: u64) -> Self {
+        Self(HashMap::new(), i)
     }
-    pub(crate) fn alloc(&mut self, s: &str) -> u64 {
-        *self.0.entry(s.to_string()).or_insert_with(|| {
+    pub(crate) fn alloc(&mut self, s: T) -> u64 {
+        *self.0.entry(s).or_insert_with(|| {
             self.1 += 1;
             self.1
         })
     }
     pub(crate) fn new_clause(&mut self) {
         self.0.clear();
+    }
+    pub(crate) fn get_next(&self) -> u64 {
+        self.1 + 1
     }
 }
 
@@ -100,13 +103,17 @@ impl<'a> Parser<'a> {
     pub fn new(sc: Scanner<'a>) -> Self {
         Self { sc }
     }
-    pub(crate) fn parse_def(&mut self, id: &mut IdAlloc) -> Result<Option<Def>, Error> {
+
+    pub(crate) fn parse_def(&mut self, id: &mut IdAlloc<String>) -> Result<Option<Def>, Error> {
         if self.sc.peek()?.ty() == TokenTy::Eof {
             return Ok(None);
         }
         let (name, loc, pat) = self.parse_expr(id)?;
-        self.sc.expect_token(TokenTy::Pen)?;
-        let rep = self.parse_clause(id)?;
+        let rep = if self.sc.is_token(TokenTy::Pen)? {
+            self.parse_clause(id)?
+        } else {
+            Vec::new()
+        };
         self.sc.expect_token(TokenTy::Period)?;
 
         Ok(Some(Def {
@@ -117,7 +124,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub(crate) fn parse_clause(&mut self, id: &mut IdAlloc) -> Result<Vec<Expr>, Error> {
+    pub(crate) fn parse_clause(&mut self, id: &mut IdAlloc<String>) -> Result<Vec<Expr>, Error> {
         let mut v = Vec::new();
         loop {
             v.push(self.parse_expr(id)?.2);
@@ -127,7 +134,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr(&mut self, id: &mut IdAlloc) -> Result<(String, Loc, Expr), Error> {
+    fn parse_expr(&mut self, id: &mut IdAlloc<String>) -> Result<(String, Loc, Expr), Error> {
         let (loc, name) = self.sc.expect_identifier()?;
 
         let res = if name.chars().next().unwrap().is_lowercase() {
@@ -142,7 +149,7 @@ impl<'a> Parser<'a> {
             Expr::Fun { name, args, loc }
         } else {
             let name = name.clone();
-            let id = id.alloc(&name);
+            let id = id.alloc(name.clone());
             Expr::Var { name, id, loc }
         };
 

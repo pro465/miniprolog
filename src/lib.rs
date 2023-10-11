@@ -12,12 +12,14 @@ mod unify;
 pub type Rules = HashMap<String, Vec<Def>>;
 
 pub struct Context {
-    id: IdAlloc,
+    id: IdAlloc<String>,
 }
 
 impl Context {
     pub fn new() -> Self {
-        Self { id: IdAlloc::new() }
+        Self {
+            id: IdAlloc::new(0),
+        }
     }
 
     pub fn parse(&mut self, src: String) -> Result<Rules, Error> {
@@ -53,50 +55,57 @@ impl Context {
         let mut qvars = HashMap::new();
         let mut order = Vec::new();
         vars(&mut qvars, &mut order, &e);
-        match apply_internal(&mut self.id, defs, e.clone(), qvars) {
+        match apply_internal(self.id.get_next(), defs, e.clone(), qvars) {
             Ok(sols) if !sols.is_empty() => {
                 print_sols(sols, &order);
             }
-            _ => println!("false."),
+            _ => println!("No."),
         }
     }
 }
 fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
     let mut i = 0;
+    // TODO: fix time complexity
     while i < sols.len() {
         if sols[0..i].contains(&sols[i]) {
             sols.remove(i);
         }
         i += 1;
     }
-    for sol in sols {
-        if sol.is_empty() {
-            println!("true.");
-            break;
-        }
+    for mut sol in sols {
         let mut c = false;
         for v in order {
             let e = &sol[v];
+            // ignore things like Z = Z
+            match e {
+                Expr::Var { name, .. } if name == v => {
+                    sol.remove(v);
+                    continue;
+                }
+                _ => {}
+            }
             if c {
                 print!(", ");
             }
             print!("{} = {}", v, e);
             c = true;
         }
+        // when the query has no variables, the binding set would be empty.
+        // then it simply is a yes or no question.
+        if sol.is_empty() {
+            print!("Yes");
+        }
         println!(".")
     }
 }
 
 fn apply_internal<'a>(
-    gen: &mut IdAlloc,
+    gen: u64,
     defs: &Rules,
     mut e: Vec<Expr>,
     qvars: HashMap<&'a str, Expr>,
 ) -> Result<Vec<HashMap<&'a str, Expr>>, ApplyError> {
     with_stacker(|| {
-        e.retain(
-            |i| !matches!(i, Expr::Fun { name, args, .. } if name == "true" && args.is_empty()),
-        );
         let curr_e = match e.pop() {
             Some(e) => e,
             _ => return Ok(vec![qvars]),
@@ -119,18 +128,17 @@ fn apply_internal<'a>(
         if v.is_empty() {
             Err(ApplyError::NoMatch)
         } else {
-            gen.new_clause();
-
+            let mut alloc = IdAlloc::new(gen);
             let mut ret = Vec::new();
             for (rep, sub) in v {
                 let qvars: HashMap<&str, Expr> = qvars
                     .iter()
-                    .map(|(s, e)| (*s, substitute_and_freshen(gen, &sub, e)))
+                    .map(|(s, e)| (*s, substitute_and_freshen(&mut alloc, &sub, e)))
                     .collect();
                 let e = e
                     .iter()
                     .chain(rep.iter())
-                    .map(|e| substitute_and_freshen(gen, &sub, e))
+                    .map(|e| substitute_and_freshen(&mut alloc, &sub, e))
                     .collect();
                 ret.extend_from_slice(&apply_internal(gen, defs, e, qvars).unwrap_or_default());
             }

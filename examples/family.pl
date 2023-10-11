@@ -1,9 +1,9 @@
 % taken from here: https://en.wikipedia.org/wiki/Prolog#Execution
-mother_child(trude, sally) :- true.
+mother_child(trude, sally).
  
-father_child(tom, sally) :- true.
-father_child(tom, erica) :- true.
-father_child(mike, tom) :- true.
+father_child(tom, sally).
+father_child(tom, erica).
+father_child(mike, tom).
  
 sibling(X, Y)      :- parent_child(Z, X), parent_child(Z, Y).
  

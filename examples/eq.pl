@@ -1,1 +1,1 @@
-eq(X, X) :- true.
+eq(X, X).

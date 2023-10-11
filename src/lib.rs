@@ -22,6 +22,7 @@ impl Context {
         }
     }
 
+    // parse the "program" from the file
     pub fn parse(&mut self, src: String) -> Result<Rules, Error> {
         let scanner = token::Scanner::new(&src);
         let mut parser = parser::Parser::new(scanner);
@@ -39,6 +40,7 @@ impl Context {
         Ok(defs)
     }
 
+    // parse the input from the REPL
     pub fn parse_clause(&mut self, src: String) -> Result<Vec<Expr>, Error> {
         self.id.new_clause();
         let scanner = token::Scanner::new(&src);
@@ -51,6 +53,7 @@ impl Context {
         Ok(e)
     }
 
+    // run the program on the input
     pub fn apply(&mut self, defs: &Rules, e: Vec<Expr>) {
         let mut qvars = HashMap::new();
         let mut order = Vec::new();
@@ -63,6 +66,14 @@ impl Context {
         }
     }
 }
+
+// print the solution(s) if any
+// sols is just the list of solutions
+// for example,
+//    X = state, Y = run.
+//    X = state, Y = walk.
+//  would be (roughly) represented as
+//    [{X: state, Y: run}, {X: state, Y: walk}]
 fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
     let mut i = 0;
     // TODO: fix time complexity
@@ -99,6 +110,7 @@ fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
     }
 }
 
+// recursive implementation of the selection + SLD algorithm + backtracing
 fn apply_internal<'a>(
     gen: u64,
     defs: &Rules,
@@ -131,6 +143,8 @@ fn apply_internal<'a>(
             let mut alloc = IdAlloc::new(gen);
             let mut ret = Vec::new();
             for (rep, sub) in v {
+                // apply the same substitution that is applied to the goal in the SLD algorithm.
+                // (see below)
                 let qvars: HashMap<&str, Expr> = qvars
                     .iter()
                     .map(|(s, e)| (*s, substitute_and_freshen(&mut alloc, &sub, e)))
@@ -147,6 +161,9 @@ fn apply_internal<'a>(
     })
 }
 
+// initializes the solution binding set (the set which holds the bindings used in `print_sols`)
+// to maps between variables and themselves. each of them looks like A = A.
+// these are then applied the same substitution that is applied to the goal in the SLD algorithm.
 fn vars<'a>(v: &mut HashMap<&'a str, Expr>, o: &mut Vec<&'a str>, e: &'a [Expr]) {
     for i in e {
         match i {
@@ -160,6 +177,7 @@ fn vars<'a>(v: &mut HashMap<&'a str, Expr>, o: &mut Vec<&'a str>, e: &'a [Expr])
     }
 }
 
+// avoid stack overflows
 pub fn with_stacker<R>(f: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(32 * 1024, 1024 * 1024, f)
 }

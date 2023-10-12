@@ -57,59 +57,76 @@ impl Context {
     }
 
     // run the program on the input
-    pub fn apply(&mut self, defs: &Rules, e: Vec<Expr>) {
+    pub fn apply<'a>(&mut self, defs: &'a Rules, e: &'a [Expr]) -> SolsPrinter<'a> {
         let mut qvars = HashMap::new();
         let mut order = Vec::new();
         vars(&mut qvars, &mut order, &e);
-        match apply_internal(self.id.get_next(), defs, e.clone(), qvars) {
-            Ok(sols) => {
-                print_sols(sols, &order);
-            }
-            _ => println!("No."),
+        match apply_internal(self.id.get_next(), defs, e.to_vec(), qvars) {
+            Ok(sols) => SolsPrinter::new(sols, order),
+            _ => SolsPrinter::new(Box::new(std::iter::empty()), order),
         }
     }
 }
 
-// print the solution(s) if any
-// sols is just the iterator that enumerates the solutions
-// for example,
-//    X = state, Y = run.
-//    X = state, Y = walk.
-//  would be (roughly) represented as
-//    [{X: state, Y: run}, {X: state, Y: walk}]
-fn print_sols(sols: Sols, order: &[&str]) {
-    let mut is_empty = true;
-    // TODO: remove duplicates
-    for mut sol in sols {
-        is_empty = false;
+pub struct SolsPrinter<'a> {
+    curr: Option<HashMap<String, Expr>>,
+    sols: Sols<'a>,
+    order: Vec<&'a str>,
+}
 
-        let mut comma = false;
-        for v in order {
-            let e = &sol[*v];
-            // ignore things like Z = Z
-            match e {
-                Expr::Var { name, .. } if name == v => {
-                    sol.remove(*v);
-                    continue;
+impl<'a> SolsPrinter<'a> {
+    pub fn new(mut sols: Sols<'a>, order: Vec<&'a str>) -> Self {
+        Self {
+            curr: sols.next(),
+            sols,
+            order,
+        }
+    }
+    // print the solution if any
+    // sols is just the iterator that enumerates the solutions
+    // for example,
+    //    X = state, Y = run.
+    //    X = state, Y = walk.
+    //  would be (roughly) represented as
+    //    [{X: state, Y: run}, {X: state, Y: walk}]
+    pub fn print_next_sol(&mut self) -> bool {
+        // TODO: remove duplicates
+        if let Some(mut sol) = self.curr.take() {
+            let mut comma = false;
+            for v in &self.order {
+                let e = &sol[*v];
+                // ignore things like Z = Z
+                match e {
+                    Expr::Var { name, .. } if name == v => {
+                        sol.remove(*v);
+                        continue;
+                    }
+                    _ => {}
                 }
-                _ => {}
+                if comma {
+                    print!(", ");
+                }
+                print!("{} = {}", v, e);
+                comma = true;
             }
-            if comma {
-                print!(", ");
+            // when the query has no variables, the binding set would be empty.
+            // then it simply is a yes or no question.
+            if sol.is_empty() {
+                print!("Yes");
             }
-            print!("{} = {}", v, e);
-            comma = true;
+        } else {
+            print!("No");
         }
-        // when the query has no variables, the binding set would be empty.
-        // then it simply is a yes or no question.
-        if sol.is_empty() {
-            print!("Yes");
-        }
-        println!(".")
+        self.advance()
     }
 
-    if is_empty {
-        println!("No.");
+    fn advance(&mut self) -> bool {
+        self.curr = self.sols.next();
+        let c = self.curr.is_some();
+        if !c {
+            println!(".");
+        }
+        c
     }
 }
 

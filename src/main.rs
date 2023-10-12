@@ -67,7 +67,21 @@ fn repl(rules: &Rules, ctx: &mut Context) {
             }
         };
 
-        ctx.apply(&rules, expr);
+        let mut sols_printer = ctx.apply(&rules, &expr);
+        let mut line = String::new();
+
+        while sols_printer.print_next_sol() {
+            std::io::stdout().flush().unwrap();
+            std::io::stdin()
+                .read_line(&mut line)
+                .expect("could not read input");
+
+            if line.trim() != ";" {
+                break;
+            }
+
+            line.clear();
+        }
     }
 }
 

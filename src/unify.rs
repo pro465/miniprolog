@@ -13,10 +13,10 @@ pub(crate) enum ApplyError {
 }
 
 impl Def {
-    pub(crate) fn apply<'a>(&'a self, e: &'a Expr) -> Result<HashMap<u64, &'a Expr>, ApplyError> {
+    pub(crate) fn apply(&self, e: &Expr) -> Result<HashMap<u64, Expr>, ApplyError> {
         let mut bindings = HashMap::new();
         unify(&mut bindings, &self.pat, e)?;
-        Ok(bindings)
+        Ok(bindings.into_iter().map(|(k, v)| (k, v.clone())).collect())
     }
 }
 
@@ -51,11 +51,11 @@ fn unify<'a>(b: &mut HashMap<u64, &'a Expr>, pat: &'a Expr, e: &'a Expr) -> Resu
 // and freshen up the younglings
 pub(crate) fn substitute_and_freshen(
     gen: &mut IdAlloc<u64>,
-    b: &HashMap<u64, &Expr>,
+    b: &HashMap<u64, Expr>,
     rep: &Expr,
 ) -> Expr {
     match rep {
-        Expr::Var { id, .. } => freshen(b.get(&id).copied().unwrap_or(&rep), gen),
+        Expr::Var { id, .. } => freshen(b.get(&id).unwrap_or(rep), gen),
         Expr::Fun { name, args, loc } => Expr::Fun {
             name: name.clone(),
             loc: *loc,

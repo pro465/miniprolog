@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{parser::IdAlloc, Def, Expr};
+use crate::{
+    expr::{Expr, IdAlloc},
+    Def,
+};
 
 #[derive(Debug)]
 pub(crate) enum ApplyError {
@@ -17,6 +20,7 @@ impl Def {
     }
 }
 
+// try to unify 2 expressions
 fn unify<'a>(b: &mut HashMap<u64, &'a Expr>, pat: &'a Expr, e: &'a Expr) -> Result<(), ApplyError> {
     match (pat, e) {
         (Expr::Var { id, .. }, Expr::Var { id: id2, .. }) if b.contains_key(id2) => {
@@ -43,6 +47,8 @@ fn unify<'a>(b: &mut HashMap<u64, &'a Expr>, pat: &'a Expr, e: &'a Expr) -> Resu
     }
 }
 
+// replace all the variables by their replacement given in bindings
+// and freshen up the younglings
 pub(crate) fn substitute_and_freshen(
     gen: &mut IdAlloc<u64>,
     b: &HashMap<u64, &Expr>,
@@ -61,6 +67,8 @@ pub(crate) fn substitute_and_freshen(
     }
 }
 
+// freshens up an expression by giving it coffee
+// (or more accurately, giving the variables new ids)
 fn freshen(e: &Expr, gen: &mut IdAlloc<u64>) -> Expr {
     match e {
         Expr::Var { name, id, loc } => Expr::Var {
@@ -76,10 +84,16 @@ fn freshen(e: &Expr, gen: &mut IdAlloc<u64>) -> Expr {
     }
 }
 
-// X - Y
-// |
-// X - Z
-
+// solves the problem of unifying one variable that has already been unified
+// for example, the second X in
+//     eq(X, X).
+// when we need to unify an expression, such as `eq(Z, Y)`
+// by the time we get to unify X and Y, we already have the binding x -> Z in our map,
+// so we cannot just insert X -> Z.
+//
+// how does this function do it?
+// =============================
+// this function just tries different combinations and sees if they work.
 fn solve<'a>(b: &mut HashMap<u64, &'a Expr>, id: u64, e: &'a Expr) -> Result<(), ApplyError> {
     if let Some(e2) = b.get(&id).copied() {
         let res = if e == e2 {

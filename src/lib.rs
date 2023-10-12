@@ -12,6 +12,7 @@ mod token;
 mod unify;
 
 pub type Rules = HashMap<String, Vec<Def>>;
+type Sols<'a> = Box<dyn Iterator<Item = HashMap<String, Expr>> + 'a>;
 
 pub struct Context {
     id: IdAlloc<String>,
@@ -61,7 +62,7 @@ impl Context {
         let mut order = Vec::new();
         vars(&mut qvars, &mut order, &e);
         match apply_internal(self.id.get_next(), defs, e.clone(), qvars) {
-            Ok(sols) if !sols.is_empty() => {
+            Ok(sols) => {
                 print_sols(sols, &order);
             }
             _ => println!("No."),
@@ -70,38 +71,34 @@ impl Context {
 }
 
 // print the solution(s) if any
-// sols is just the list of solutions
+// sols is just the iterator that enumerates the solutions
 // for example,
 //    X = state, Y = run.
 //    X = state, Y = walk.
 //  would be (roughly) represented as
 //    [{X: state, Y: run}, {X: state, Y: walk}]
-fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
-    let mut i = 0;
-    // TODO: fix time complexity
-    while i < sols.len() {
-        if sols[0..i].contains(&sols[i]) {
-            sols.remove(i);
-        }
-        i += 1;
-    }
+fn print_sols(sols: Sols, order: &[&str]) {
+    let mut is_empty = true;
+    // TODO: remove duplicates
     for mut sol in sols {
-        let mut c = false;
+        is_empty = false;
+
+        let mut comma = false;
         for v in order {
-            let e = &sol[v];
+            let e = &sol[*v];
             // ignore things like Z = Z
             match e {
                 Expr::Var { name, .. } if name == v => {
-                    sol.remove(v);
+                    sol.remove(*v);
                     continue;
                 }
                 _ => {}
             }
-            if c {
+            if comma {
                 print!(", ");
             }
             print!("{} = {}", v, e);
-            c = true;
+            comma = true;
         }
         // when the query has no variables, the binding set would be empty.
         // then it simply is a yes or no question.
@@ -110,19 +107,23 @@ fn print_sols(mut sols: Vec<HashMap<&str, Expr>>, order: &[&str]) {
         }
         println!(".")
     }
+
+    if is_empty {
+        println!("No.");
+    }
 }
 
 // recursive implementation of the selection + SLD algorithm + backtracing
 fn apply_internal<'a>(
     gen: u64,
-    defs: &Rules,
+    defs: &'a Rules,
     mut e: Vec<Expr>,
-    qvars: HashMap<&'a str, Expr>,
-) -> Result<Vec<HashMap<&'a str, Expr>>, ApplyError> {
-    with_stacker(|| {
+    qvars: HashMap<String, Expr>,
+) -> Result<Sols<'a>, ApplyError> {
+    with_stacker(move || {
         let curr_e = match e.pop() {
             Some(e) => e,
-            _ => return Ok(vec![qvars]),
+            _ => return Ok(Box::new(std::iter::once(qvars)) as _),
         };
         let f_defs = match &curr_e {
             Expr::Fun { name, .. } => {
@@ -136,30 +137,24 @@ fn apply_internal<'a>(
         };
         let v: Vec<_> = f_defs
             .iter()
-            .filter_map(|x| x.apply(&curr_e).ok().map(|s| (&x.rep, s)))
+            .filter_map(|x| x.apply(&curr_e).ok().map(move |s| (&x.rep, s)))
             .collect();
 
-        if v.is_empty() {
-            Err(ApplyError::NoMatch)
-        } else {
+        Ok(Box::new(v.into_iter().flat_map(move |(rep, sub)| {
             let mut alloc = IdAlloc::new(gen);
-            let mut ret = Vec::new();
-            for (rep, sub) in v {
-                // apply the same substitution that is applied to the goal in the SLD algorithm.
-                // (see below)
-                let qvars: HashMap<&str, Expr> = qvars
-                    .iter()
-                    .map(|(s, e)| (*s, substitute_and_freshen(&mut alloc, &sub, e)))
-                    .collect();
-                let e = e
-                    .iter()
-                    .chain(rep.iter())
-                    .map(|e| substitute_and_freshen(&mut alloc, &sub, e))
-                    .collect();
-                ret.extend_from_slice(&apply_internal(gen, defs, e, qvars).unwrap_or_default());
-            }
-            Ok(ret)
-        }
+            // apply the same substitution that is applied to the goal in the SLD algorithm.
+            // (see below)
+            let qvars: HashMap<String, Expr> = qvars
+                .iter()
+                .map(|(s, e)| (s.clone(), substitute_and_freshen(&mut alloc, &sub, e)))
+                .collect();
+            let e = e
+                .iter()
+                .chain(rep.iter())
+                .map(|e| substitute_and_freshen(&mut alloc, &sub, e))
+                .collect();
+            apply_internal(gen, defs, e, qvars).unwrap_or_else(|_| Box::new(std::iter::empty()))
+        })) as _)
     })
 }
 
@@ -168,12 +163,12 @@ fn apply_internal<'a>(
 // these are then applied the same substitution that is applied to the goal in the SLD algorithm.
 // ensuring that the final result is the map from the variables to those values that result in the
 // empty clause.
-fn vars<'a>(v: &mut HashMap<&'a str, Expr>, o: &mut Vec<&'a str>, e: &'a [Expr]) {
+fn vars<'a>(v: &mut HashMap<String, Expr>, o: &mut Vec<&'a str>, e: &'a [Expr]) {
     for i in e {
         match i {
             Expr::Fun { args, .. } => vars(v, o, args),
-            Expr::Var { name, .. } if !v.contains_key(&&name[..]) => {
-                v.insert(name, i.clone());
+            Expr::Var { name, .. } if !v.contains_key(name) => {
+                v.insert(name.clone(), i.clone());
                 o.push(name)
             }
             _ => {}

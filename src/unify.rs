@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{parser::IdAlloc, Def, Expr};
+use crate::{
+    expr::{Expr, IdAlloc},
+    Def,
+};
 
 #[derive(Debug)]
 pub(crate) enum ApplyError {

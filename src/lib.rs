@@ -1,10 +1,12 @@
 use error::Error;
-use parser::{Def, Expr, IdAlloc};
+use expr::{Expr, IdAlloc};
+use parser::Def;
 use std::collections::HashMap;
 use token::TokenTy;
 use unify::{substitute_and_freshen, ApplyError};
 
 mod error;
+mod expr;
 mod parser;
 mod token;
 mod unify;
@@ -164,6 +166,8 @@ fn apply_internal<'a>(
 // initializes the solution binding set (the set which holds the bindings used in `print_sols`)
 // to maps between variables and themselves. each of them looks like A = A.
 // these are then applied the same substitution that is applied to the goal in the SLD algorithm.
+// ensuring that the final result is the map from the variables to those values that result in the
+// empty clause.
 fn vars<'a>(v: &mut HashMap<&'a str, Expr>, o: &mut Vec<&'a str>, e: &'a [Expr]) {
     for i in e {
         match i {

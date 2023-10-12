@@ -86,6 +86,8 @@ impl<'a> Scanner<'a> {
         self.loc
     }
 
+    // sees if the next token is the token given.
+    // If it is, skips it.
     pub fn is_token(&mut self, tok: TokenTy) -> Result<bool, Error> {
         if self.peek()?.ty == tok {
             self.expect_token(tok)?;
@@ -175,6 +177,7 @@ impl<'a> Scanner<'a> {
         Ident(ident.to_string())
     }
 
+    // skip whitespaces and comments
     fn skip_whitespace(&mut self) {
         loop {
             let i = self
@@ -196,6 +199,7 @@ impl<'a> Scanner<'a> {
             self.skip(i);
         }
     }
+    // skips len characters while keeping track of line info
     fn skip(&mut self, len: usize) {
         for c in self.rest[..len].chars() {
             self.loc.col();

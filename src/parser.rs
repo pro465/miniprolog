@@ -21,6 +21,8 @@ impl<'a> Parser<'a> {
         Self { sc }
     }
 
+    // parses a horn clause of the form 
+    //     f(args) (:- (expr),+ .)?
     pub(crate) fn parse_def(&mut self, id: &mut IdAlloc<String>) -> Result<Option<Def>, Error> {
         if self.sc.peek()?.ty() == TokenTy::Eof {
             return Ok(None);
@@ -41,6 +43,9 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // parses clauses (expressions separated by commas)
+    // also works for parsing arguments in an expression 
+    // due to the similar shape.
     pub(crate) fn parse_clause(&mut self, id: &mut IdAlloc<String>) -> Result<Vec<Expr>, Error> {
         let mut v = Vec::new();
         loop {

@@ -90,7 +90,6 @@ impl<'a> SolsPrinter<'a> {
     //  would be (roughly) represented as
     //    [{X: state, Y: run}, {X: state, Y: walk}]
     pub fn print_next_sol(&mut self) -> bool {
-        // TODO: remove duplicates
         if let Some(mut sol) = self.curr.take() {
             let mut comma = false;
             for v in &self.order {
